@@ -163,29 +163,40 @@ def main():
 """)
 
     # ---------------- PDF CHATBOT PAGE ----------------
+    # ---------------- PDF CHATBOT PAGE ----------------
     elif page == "🤖 PDF Chatbot":
         if "messages" not in st.session_state:
             st.session_state.messages = [
                 {"role": "assistant", "content": "📄 Upload PDFs and ask me a question"}
             ]
 
-        # Render chat history
+        # 1. Render existing chat history
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-        # User input
+        # 2. Handle User Input
         prompt = st.chat_input("Ask a question...")
+        
         if prompt:
+            # Display user message immediately in UI
+            with st.chat_message("user"):
+                st.write(prompt)
+            
+            # Add to session state
             st.session_state.messages.append({"role": "user", "content": prompt})
 
-            # Get model response
+            # 3. Get and Display Model Response
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     answer = user_input(prompt)
                     st.write(answer)
-
+            
+            # Add assistant response to session state
             st.session_state.messages.append({"role": "assistant", "content": answer})
+            
+            # Force a rerun to ensure the state is synced
+            st.rerun()
 
     # ---------------- ABOUT PAGE ----------------
     elif page == "ℹ️ About App":
@@ -198,7 +209,4 @@ def main():
         """)
 
 if __name__ == "__main__":
-
     main()
-
-
