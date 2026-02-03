@@ -3,6 +3,7 @@ langchain
 langchain-community
 langchain-groq
 langchain-core
+langchain-text-splitters
 PyPDF2
 python-dotenv
 faiss-cpu
