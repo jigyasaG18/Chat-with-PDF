@@ -4,8 +4,9 @@ langchain-community
 langchain-groq
 langchain-core
 langchain-text-splitters
-PyPDF2
+PyPDF2>=3.0.0
 python-dotenv
 faiss-cpu
 sentence-transformers
 torch
+
