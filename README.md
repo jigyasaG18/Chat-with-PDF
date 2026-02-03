@@ -116,6 +116,10 @@ Experience the app in action on Streamlit:
 
 ## 💡 Future Enhancements
 
+* **Advanced Search:** Add filters by document name, date range, and relevance scores.
+* **Chat History Management:** Save/load conversations and export chat sessions.
+* **Performance Optimizations:** Add progress bars, response streaming, and caching.
+* **UI/UX Improvements:** Markdown rendering, code highlighting, and dark theme.
 * **Context Expansion:** Dynamically expand or summarize context chunks for even larger PDFs.
 * **Custom Knowledge Bases:** Integrate multiple knowledge sources beyond PDFs.
 * **Multi-Language Support:** Enable embeddings and LLM reasoning for multiple languages.
