@@ -3,7 +3,7 @@ from PyPDF2 import PdfReader
 import streamlit as st
 from dotenv import load_dotenv
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
@@ -200,4 +200,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
