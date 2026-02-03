@@ -42,9 +42,35 @@ The app follows a **three-layer architecture**:
 
 ---
 
-## 🔍 Key Features
+## � Document Management
+
+The app provides comprehensive document management capabilities:
+
+### **Document Tracking**
+* **Real-time Inventory:** View all loaded PDFs with metadata in the sidebar
+* **Upload Timestamps:** Track when each document was processed
+* **Chunk Statistics:** See how many text chunks were created from each PDF
+* **Session Persistence:** Document list persists throughout your chat session
+
+### **Individual PDF Management**
+* **Selective Deletion:** Remove specific PDFs without affecting others or chat history
+* **Automatic Rebuilding:** Vector store automatically rebuilds when PDFs are deleted
+* **Source Attribution:** Answers show which PDF(s) the information came from
+* **Granular Control:** Manage your knowledge base with precision
+
+### **Smart Processing**
+* **Metadata Storage:** Each PDF's chunks are tagged with source information
+* **Efficient Updates:** Only rebuilds necessary parts when documents change
+* **Clean Removal:** Completely removes PDFs and associated data when deleted
+
+---
+
+## �🔍 Key Features
 
 * **Multi-PDF Support:** Upload one or more PDFs at a time for comprehensive knowledge access.
+* **Document Management:** Track, view, and delete individual PDFs without clearing chat history.
+* **Source Attribution:** Answers include source document references for transparency and verification.
+* **Metadata Tracking:** Display PDF names, upload timestamps, and processing statistics.
 * **Context-Limited Responses:** Prevents overload by restricting the number of tokens sent to the LLM, ensuring smooth performance.
 * **Chat History:** Keeps track of all your interactions, allowing for continuous, coherent conversations.
 * **Lightweight & Efficient:** Embeddings and vector storage are local, minimizing external dependencies.

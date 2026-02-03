@@ -1,7 +1,10 @@
 import os
+import json
+import shutil
 from PyPDF2 import PdfReader
 import streamlit as st
 from dotenv import load_dotenv
+from datetime import datetime
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -38,32 +41,68 @@ LLM = ChatGroq(
 
 # ---------------- PDF READING ----------------
 def get_pdf_text(pdf_docs):
-    text = ""
+    text_data = {}  # {pdf_name: text_content}
     for pdf in pdf_docs:
         reader = PdfReader(pdf)
+        text = ""
         for page in reader.pages:
             page_text = page.extract_text()
             if page_text:
                 text += page_text
-    return text
+        text_data[pdf.name] = text
+    return text_data
 
 # ---------------- TEXT SPLITTING ----------------
-def get_text_chunks(text):
+def get_text_chunks(text_data):
+    """
+    text_data: {pdf_name: text_content}
+    Returns: [(chunk_text, pdf_name), ...]
+    """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,     # smaller chunks to avoid 413 errors
         chunk_overlap=100
     )
-    return splitter.split_text(text)
+    chunks_with_source = []
+    for pdf_name, text in text_data.items():
+        chunks = splitter.split_text(text)
+        for chunk in chunks:
+            chunks_with_source.append((chunk, pdf_name))
+    return chunks_with_source
 
 # ---------------- VECTOR STORE ----------------
-def get_vector_store(chunks):
-    if not chunks:
+def get_vector_store(chunks_with_source):
+    """
+    chunks_with_source: [(chunk_text, pdf_name), ...]
+    """
+    if not chunks_with_source:
         st.error("No readable text found in PDFs.")
         return False
 
-    vector_store = FAISS.from_texts(chunks, embedding=EMBEDDINGS)
+    chunks_only = [chunk for chunk, _ in chunks_with_source]
+    vector_store = FAISS.from_texts(chunks_only, embedding=EMBEDDINGS)
     vector_store.save_local("faiss_index")
+    
+    # Save metadata mapping chunks to PDF sources
+    chunk_metadata = {str(i): pdf_name for i, (_, pdf_name) in enumerate(chunks_with_source)}
+    with open("chunk_metadata.json", "w") as f:
+        json.dump(chunk_metadata, f)
+    
     return True
+
+def rebuild_vector_store():
+    """Rebuild vector store from loaded PDFs (excluding deleted ones)"""
+    if "loaded_pdfs" not in st.session_state or not st.session_state.loaded_pdfs:
+        return False
+    
+    all_chunks_with_source = []
+    for pdf_info in st.session_state.loaded_pdfs.values():
+        chunks_with_source = pdf_info.get("chunks_with_source", [])
+        all_chunks_with_source.extend(chunks_with_source)
+    
+    if not all_chunks_with_source:
+        return False
+    
+    return get_vector_store(all_chunks_with_source)
 
 # ---------------- USER QUERY ----------------
 def user_input(question):
@@ -81,10 +120,22 @@ def user_input(question):
     # Limit total context size to prevent API errors
     MAX_CONTEXT_CHARS = 3000
     context = ""
-    for doc in docs:
+    sources = set()
+    
+    for idx, doc in enumerate(docs):
         if len(context) + len(doc.page_content) > MAX_CONTEXT_CHARS:
             break
         context += doc.page_content + "\n\n"
+        
+        # Try to get source document name
+        if os.path.exists("chunk_metadata.json"):
+            try:
+                with open("chunk_metadata.json", "r") as f:
+                    chunk_metadata = json.load(f)
+                    if str(idx) in chunk_metadata:
+                        sources.add(chunk_metadata[str(idx)])
+            except:
+                pass
 
     messages = [
         SystemMessage(
@@ -98,13 +149,38 @@ def user_input(question):
     ]
 
     response = LLM.invoke(messages)
-    return response.content
+    
+    # Format response with sources
+    answer = response.content
+    if sources:
+        answer += f"\n\n📄 *Source: {', '.join(sources)}*"
+    
+    return answer
 
 # ---------------- CLEAR CHAT ----------------
 def clear_chat_history():
     st.session_state.messages = [
         {"role": "assistant", "content": "📄 Upload PDFs and ask me a question"}
     ]
+
+# ---------------- DELETE PDF ----------------
+def delete_pdf(pdf_name):
+    """Delete a specific PDF and rebuild vector store"""
+    if "loaded_pdfs" in st.session_state and pdf_name in st.session_state.loaded_pdfs:
+        del st.session_state.loaded_pdfs[pdf_name]
+        
+        # Rebuild vector store without deleted PDF
+        if st.session_state.loaded_pdfs:
+            rebuild_vector_store()
+        else:
+            # If no PDFs left, remove indices
+            if os.path.exists("faiss_index"):
+                shutil.rmtree("faiss_index")
+            if os.path.exists("chunk_metadata.json"):
+                os.remove("chunk_metadata.json")
+        
+        st.success(f"✅ Deleted '{pdf_name}'")
+        st.rerun()
 
 # ---------------- MAIN APP ----------------
 def main():
@@ -113,6 +189,11 @@ def main():
         page_icon="🤖",
         layout="wide"
     )
+    
+    # Initialize session state for loaded PDFs
+    if "loaded_pdfs" not in st.session_state:
+        st.session_state.loaded_pdfs = {}
+    
     render_header()
 
     # ---------------- SIDEBAR ----------------
@@ -121,6 +202,27 @@ def main():
         page = st.radio("Go to", ["🏠 Home", "🤖 PDF Chatbot", "ℹ️ About App"])
 
         if page == "🤖 PDF Chatbot":
+            st.markdown("---")
+            st.subheader("📚 Document Management")
+            
+            # Show loaded PDFs
+            if st.session_state.loaded_pdfs:
+                st.markdown("**Loaded Documents:**")
+                for pdf_name, pdf_info in st.session_state.loaded_pdfs.items():
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        timestamp = pdf_info.get("timestamp", "Unknown")
+                        chunks_count = pdf_info.get("chunks_count", 0)
+                        st.caption(f"📄 {pdf_name}\n*{timestamp}*\n🔗 {chunks_count} chunks")
+                    with col2:
+                        if st.button("🗑️", key=f"delete_{pdf_name}", help="Delete this PDF"):
+                            delete_pdf(pdf_name)
+            else:
+                st.info("No PDFs loaded yet")
+            
+            st.markdown("---")
+            st.subheader("📤 Upload PDFs")
+            
             pdf_docs = st.file_uploader(
                 "Upload PDF files",
                 accept_multiple_files=True
@@ -129,10 +231,22 @@ def main():
             if st.button("🚀 Submit & Process"):
                 if pdf_docs:
                     with st.spinner("Processing PDFs..."):
-                        raw_text = get_pdf_text(pdf_docs)
-                        chunks = get_text_chunks(raw_text)
-                        if get_vector_store(chunks):
+                        text_data = get_pdf_text(pdf_docs)
+                        chunks_with_source = get_text_chunks(text_data)
+                        
+                        # Store metadata for each PDF
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        for pdf in pdf_docs:
+                            pdf_chunks = [c for c, source in chunks_with_source if source == pdf.name]
+                            st.session_state.loaded_pdfs[pdf.name] = {
+                                "timestamp": timestamp,
+                                "chunks_count": len(pdf_chunks),
+                                "chunks_with_source": [(c, pdf.name) for c in pdf_chunks]
+                            }
+                        
+                        if get_vector_store(chunks_with_source):
                             st.success("✅ PDFs processed successfully!")
+                        st.rerun()
                 else:
                     st.error("Please upload at least one PDF.")
 
@@ -148,6 +262,8 @@ def main():
 - 🔍 **Semantic search powered by FAISS** for accurate answers  
 - 🧠 **Groq + LLaMA-3.1** for ultra-fast responses  
 - 🧩 **Chunked document processing** to handle large PDFs safely  
+- � **Document management** - track, view, and delete individual PDFs
+- 🔗 **Source attribution** - see which PDF each answer comes from
 - 🛡️ **Token-safe architecture** (no 413 / TPM errors)  
 - 💬 **Chat-style interface** with conversation history  
 - ⚡ **Lightweight & local embeddings** (no OpenAI dependency)
@@ -157,7 +273,9 @@ def main():
 1. Go to **PDF Chatbot**
 2. Upload one or more PDF files
 3. Click **Submit & Process**
-4. Ask questions in the chat box
+4. View loaded documents in the sidebar with timestamps and chunk counts
+5. Ask questions in the chat box - answers will show source documents
+6. Delete individual PDFs using the 🗑️ button without clearing chat history
 
 👈 Use the sidebar to navigate between pages.
 """)
@@ -170,6 +288,12 @@ def main():
                 {"role": "assistant", "content": "📄 Upload PDFs and ask me a question"}
             ]
 
+        # Display loaded documents summary
+        if st.session_state.loaded_pdfs:
+            with st.expander("📚 Loaded Documents", expanded=False):
+                for pdf_name, pdf_info in st.session_state.loaded_pdfs.items():
+                    st.caption(f"✅ {pdf_name} ({pdf_info.get('chunks_count', 0)} chunks)")
+        
         # 1. Render existing chat history
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
