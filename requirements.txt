@@ -2,16 +2,8 @@
 langchain
 langchain-core
 
-# OpenAI Integration
-langchain-openai
-openai
-
 # Anthropic Integration
 langchain-anthropic
-
-# Google Gemini (PaLM) Integration
-langchain-google-genai
-google-generativeai
 
 # Hugging Face Integration
 langchain-huggingface
@@ -38,3 +30,4 @@ PyPDF2>=3.0.0
 faiss-cpu
 langchain-community
 langchain-text-splitters
+langchain-groq
