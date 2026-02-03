@@ -2,8 +2,6 @@ streamlit
 PyPDF2
 python-dotenv
 langchain
-langchain-embeddings
-langchain-llms
 faiss-cpu
-huggingface-hub
 transformers
+huggingface-hub
